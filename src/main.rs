@@ -1,3 +1,4 @@
+use clap::Parser;
 use serialport::{SerialPort, SerialPortType};
 use std::{
     io::{prelude::*, BufRead, BufReader, BufWriter},
@@ -6,7 +7,18 @@ use std::{
     time::Duration,
 };
 
+#[derive(Parser)]
+#[command(long_about = None)]
+struct Cli {
+    /// Port to listen on. Defaults to 7878.
+    #[arg(short, long)]
+    port: Option<u16>,
+}
+
 fn main() {
+    let cli = Cli::parse();
+    let port_number = cli.port.unwrap_or(7878);
+
     println!("Waiting for serial connection...");
     let serial_port = get_serial_port();
     println!(
@@ -14,7 +26,7 @@ fn main() {
         serial_port.name().unwrap_or("unknown".to_string())
     );
 
-    let tcp_listener = TcpListener::bind("0.0.0.0:7878").unwrap();
+    let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", port_number)).unwrap();
 
     println!("Waiting for TCP connection...");
 
