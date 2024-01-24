@@ -87,5 +87,5 @@ fn get_serial_port() -> Box<dyn SerialPort> {
     serialport::new(&port_info.port_name, 9600)
         .timeout(Duration::from_secs(1))
         .open()
-        .expect(format!("Could not create port on {}", &port_info.port_name).as_str())
+        .unwrap_or_else(|_| panic!("Could not create port on {}", &port_info.port_name))
 }
