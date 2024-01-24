@@ -1,13 +1,13 @@
 use clap::Parser;
 use serialport::{SerialPort, SerialPortInfo, SerialPortType};
 use std::{
+    convert::Infallible,
     io::{prelude::*, BufRead, BufReader, BufWriter},
     sync::{Arc, Mutex},
     thread::sleep,
     time::Duration,
 };
 use warp::{
-    http::StatusCode,
     reject::Rejection,
     reply::{Reply, WithStatus},
     Filter,
@@ -83,23 +83,40 @@ fn create_plotter_handler(
 ) -> impl warp::Filter<Extract = (WithStatus<impl Reply>,), Error = Rejection> + Clone {
     let serial_port = Arc::new(Mutex::new(serial_port.try_clone().unwrap()));
 
-    let handler = move |command_bytes: warp::hyper::body::Bytes| {
+    async fn handler(
+        command_bytes: warp::hyper::body::Bytes,
+        serial_port: Arc<Mutex<Box<dyn SerialPort>>>,
+    ) -> Result<WithStatus<impl Reply>, Infallible> {
         if let Ok(command) = String::from_utf8(command_bytes.to_vec()) {
             if command.contains('\r') || command.contains('\n') {
-                warp::reply::with_status(warp::reply(), warp::http::StatusCode::BAD_REQUEST)
+                Ok(warp::reply::with_status(
+                    warp::reply(),
+                    warp::http::StatusCode::BAD_REQUEST,
+                ))
             } else {
-                send_to_serial_and_wait_for_ok(&**serial_port.lock().unwrap(), command.as_str());
-                warp::reply::with_status(warp::reply(), StatusCode::OK)
+                tokio::task::spawn_blocking(move || {
+                    send_to_serial_and_wait_for_ok(&**serial_port.lock().unwrap(), command.as_str())
+                })
+                .await
+                .unwrap();
+                Ok(warp::reply::with_status(
+                    warp::reply(),
+                    warp::http::StatusCode::OK,
+                ))
             }
         } else {
-            warp::reply::with_status(warp::reply(), StatusCode::BAD_REQUEST)
+            Ok(warp::reply::with_status(
+                warp::reply(),
+                warp::http::StatusCode::BAD_REQUEST,
+            ))
         }
-    };
+    }
 
     warp::post()
         .and(warp::path::end())
         .and(warp::filters::body::bytes())
-        .map(handler)
+        .and(warp::any().map(move || serial_port.clone()))
+        .and_then(handler)
 }
 
 fn send_to_serial_and_wait_for_ok(serial_port: &dyn SerialPort, command: &str) {
