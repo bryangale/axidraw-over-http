@@ -22,6 +22,9 @@ struct Cli {
     /// Port to listen on. Defaults to 7878.
     #[arg(short, long)]
     port: Option<u16>,
+    /// Serial device where the AxiDraw is connected. If none specified, will auto-detect.
+    #[arg(short, long)]
+    device: Option<String>,
 }
 
 #[tokio::main]
@@ -30,7 +33,7 @@ async fn main() {
     let port_number = cli.port.unwrap_or(7878);
 
     println!("Waiting for serial connection...");
-    let serial_port = get_serial_port();
+    let serial_port = get_serial_port(&cli.device);
     println!(
         "Serial connection {} opened",
         serial_port.name().unwrap_or("unknown".to_string())
@@ -62,9 +65,11 @@ async fn main() {
     let _ = tokio::task::spawn(server).await;
 }
 
-fn get_serial_port() -> Box<dyn SerialPort> {
+fn get_serial_port(device: &Option<String>) -> Box<dyn SerialPort> {
     let port_filter = |port_info: &&SerialPortInfo| {
-        if let SerialPortType::UsbPort(usb_port_info) = &port_info.port_type {
+        if let Some(device) = device {
+            port_info.port_name == *device
+        } else if let SerialPortType::UsbPort(usb_port_info) = &port_info.port_type {
             usb_port_info
                 .product
                 .as_ref()

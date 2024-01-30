@@ -84,4 +84,5 @@ COPY --from=build /bin/server /bin/
 EXPOSE 7878
 
 # What the container should run when it is started.
-CMD ["/bin/server"]
+ENV DEFAULT_ARGS ""
+CMD ["sh", "-c", "/bin/server ${ARGS:-${DEFAULT_ARGS}}"]
