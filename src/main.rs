@@ -4,6 +4,7 @@ use std::{
     collections::VecDeque,
     convert::Infallible,
     io::{prelude::*, BufRead, BufReader, BufWriter},
+    net::IpAddr,
     str::FromStr,
     sync::Arc,
     thread::{sleep, spawn},
@@ -56,7 +57,7 @@ async fn main() {
     let plotter_handler = create_plotter_handler(plotter_handler_command_buffer);
 
     let (_, server) = warp::serve(plotter_handler).bind_with_graceful_shutdown(
-        ([0, 0, 0, 0], port_number),
+        (IpAddr::from_str("::").unwrap(), port_number),
         async move {
             tokio::signal::ctrl_c().await.unwrap();
         },
