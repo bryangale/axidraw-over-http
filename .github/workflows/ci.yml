@@ -1,0 +1,6 @@
+name: "CI"
+on: push
+
+jobs:
+  rust-ci:
+    uses: bryangale/workflows/.github/workflows/rust-ci.yml@main

@@ -1,0 +1,11 @@
+name: Publish Docker image
+
+on:
+  workflow_run:
+    workflows: [ "ci" ]
+    branches: ["main"]
+    types:  ["completed"]
+
+jobs:
+  publish-docker-image:
+    uses: bryangale/workflows/.github/workflows/publish-docker-image.yml@main
