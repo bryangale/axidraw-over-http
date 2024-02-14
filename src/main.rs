@@ -1,16 +1,14 @@
 use clap::Parser;
 use serialport::{SerialPort, SerialPortInfo, SerialPortType};
 use std::{
-    collections::VecDeque,
     convert::Infallible,
     io::{prelude::*, BufRead, BufReader, BufWriter},
     net::IpAddr,
     str::FromStr,
-    sync::Arc,
+    sync::mpsc::{channel, Sender},
     thread::{sleep, spawn},
     time::Duration,
 };
-use tokio::sync::Mutex;
 use warp::{
     reject::Rejection,
     reply::{Reply, WithStatus},
@@ -40,21 +38,15 @@ async fn main() {
         serial_port.name().unwrap_or("unknown".to_string())
     );
 
-    let command_buffer = Arc::new(Mutex::new(VecDeque::<String>::new()));
-    let plotter_handler_command_buffer = command_buffer.clone();
+    let (command_sender, command_receiver) = channel::<String>();
 
     spawn(move || loop {
-        let mut command_buffer = command_buffer.blocking_lock();
+        let command = command_receiver.recv().unwrap();
 
-        let command = command_buffer.pop_front();
-        drop(command_buffer);
-
-        if let Some(command) = command {
-            send_to_serial_and_wait_for_ok(&*serial_port, command.as_str());
-        }
+        send_to_serial_and_wait_for_ok(&*serial_port, command.as_str());
     });
 
-    let plotter_handler = create_plotter_handler(plotter_handler_command_buffer);
+    let plotter_handler = create_plotter_handler(command_sender);
 
     let (_, server) = warp::serve(plotter_handler).bind_with_graceful_shutdown(
         (IpAddr::from_str("::").unwrap(), port_number),
@@ -102,11 +94,11 @@ fn get_serial_port(device: &Option<String>) -> Box<dyn SerialPort> {
 }
 
 fn create_plotter_handler(
-    command_buffer: Arc<Mutex<VecDeque<String>>>,
+    command_sender: Sender<String>,
 ) -> impl warp::Filter<Extract = (WithStatus<impl Reply>,), Error = Rejection> + Clone {
     async fn handler(
         command_bytes: warp::hyper::body::Bytes,
-        command_buffer: Arc<Mutex<VecDeque<String>>>,
+        command_buffer: Sender<String>,
     ) -> Result<WithStatus<impl Reply>, Infallible> {
         if let Ok(body_bytes) = String::from_utf8(command_bytes.to_vec()) {
             if body_bytes.contains('\r') {
@@ -115,10 +107,11 @@ fn create_plotter_handler(
                     warp::http::StatusCode::BAD_REQUEST,
                 ))
             } else {
-                let mut command_buffer = command_buffer.lock().await;
                 for command in body_bytes.split('\n') {
                     if !command.is_empty() {
-                        command_buffer.push_back(String::from_str(command).unwrap());
+                        command_buffer
+                            .send(String::from_str(command).unwrap())
+                            .unwrap();
                     }
                 }
 
@@ -138,7 +131,7 @@ fn create_plotter_handler(
     warp::post()
         .and(warp::path("batch-queue"))
         .and(warp::filters::body::bytes())
-        .and(warp::any().map(move || command_buffer.clone()))
+        .and(warp::any().map(move || command_sender.clone()))
         .and_then(handler)
 }
 
