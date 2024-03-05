@@ -142,7 +142,11 @@ async fn main() {
                     break;
                 }
 
-                send_to_serial_and_wait_for_ok(&*serial_port, buffer.pop_front().unwrap().as_str());
+                let command = buffer.pop_front().unwrap().clone();
+                drop(buffer);
+                drop(state);
+
+                send_to_serial_and_wait_for_ok(&*serial_port, command.as_str());
             },
         }
     });
