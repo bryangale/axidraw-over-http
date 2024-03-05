@@ -81,10 +81,14 @@ impl AxidrawOverHttp for AxidrawService {
     }
 
     async fn resume(&self, _request: Request<Empty>) -> Result<Response<Empty>, Status> {
-        *self.running_status.clone().lock_owned().await = RunningStatus::Running;
-        self.control_message_sender
-            .send(ControlMessage::CheckBuffer)
-            .unwrap();
+        let mut running_status = self.running_status.clone().lock_owned().await;
+
+        if *running_status == RunningStatus::Paused {
+            *running_status = RunningStatus::Running;
+            self.control_message_sender
+                .send(ControlMessage::CheckBuffer)
+                .unwrap();
+        }
 
         Ok(Response::new(Empty {}))
     }
